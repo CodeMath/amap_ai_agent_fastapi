@@ -1,6 +1,6 @@
 # app/api/agent_router.py
 import logging
-
+from typing import List
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
@@ -8,7 +8,8 @@ from agents import RunConfig, Runner
 from pydantic import ValidationError
 
 from app.agents.core.agent_manager import AgentManager
-from app.agents.schemas.chat_schemas import AgentRequestDTO, AiAgentMessageDTO, ChatMessageDTO
+from app.agents.schemas.agent_schemas import AgentDTO
+from app.agents.schemas.chat_schemas import AgentRequestDTO, ChatMessageDTO
 from app.agents.schemas.map_schemas import AgentMapDTO, MapDTO
 
 
@@ -18,8 +19,8 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 manager = AgentManager()
 
 
-@router.post("/list", response_model=AgentMapDTO)
-async def get_agent_list(req: MapDTO):
+@router.get("/list", response_model=List[AgentDTO])
+async def get_agent_list():
     """
     좌표 정보를 받아서, 근처 에이전트 리스트를 반환합니다.
     """
@@ -35,14 +36,8 @@ async def get_agent_list(req: MapDTO):
         #         agents=[],
         #     )
         # else:
-        agents = manager.list_agents()
-        return AgentMapDTO(
-            map=MapDTO(
-                latitude=req.latitude,
-                longitude=req.longitude,
-            ),
-            agents=agents,
-        ) 
+        return manager.list_agents()
+
     except ValidationError as exc:
         print(repr(exc.errors()))
         raise HTTPException(status_code=500, detail=f"{exc.errors()[0]['type']}")
