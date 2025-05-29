@@ -1,0 +1,67 @@
+
+
+### vscode ###
+.vscode/*
+.vscode/PythonImportHelper-v2-Completion.json
+
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
+
+### tempfile ###
+*.log
+*.pot
+*.pyc
+__pycahce__/
+CACHE
+.gitmessage.txt
+
+### env ###
+.env
+*.env
+.venv
+
+### db ###
+db.sqlite3
+db.sqlite3-journal
+db_core.sqlite3
+db_core.sqlite3-journal
+
+### OSX ###
+.DS_Store
+.AppleDouble
+.LSOverride
+.idea
+
+## C extensions ###
+*.so
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test & pytest / coverage reports
+htmlcov/
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+pytest.xml
+pytest-coverage.txt
+.pytest_cache
+
+### Log ###
+logs/
+newrelic-infra/
+newrelic.ini
+
+### Test Docker compose ###
+docker-compose.yml
