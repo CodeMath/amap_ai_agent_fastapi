@@ -26,7 +26,7 @@ async def get_agent_list():
     """
     try:
         # 좌표 정보를 받아서, 근처 에이전트 리스트를 반환합니다.
-        # agents = manager.filter_agents(req.latitude, req.longitude)
+        # agents = await manager.filter_agents(req.latitude, req.longitude)
         # if not agents:
         #     return AgentMapDTO(
         #         map=MapDTO(
@@ -36,7 +36,7 @@ async def get_agent_list():
         #         agents=[],
         #     )
         # else:
-        return manager.list_agents()
+        return await manager.list_agents()
 
     except ValidationError as exc:
         print(repr(exc.errors()))
@@ -49,7 +49,7 @@ async def get_agent_list():
 @router.get("/start/{agent_id}")
 async def get_agent(agent_id: str):
     try:
-        return manager.get_agent(agent_id)
+        return await manager.get_agent(agent_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}")
 
@@ -57,7 +57,7 @@ async def get_agent(agent_id: str):
 @router.get("{agent_id}/chat-history/{sub}/")
 async def get_chat_history(sub: str, agent_id: str):
     try:
-        return manager.get_chat_history(sub, agent_id)
+        return await manager.get_chat_history(sub, agent_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}")
 
@@ -68,7 +68,7 @@ async def run_main_agent_stream(req: AgentRequestDTO):
     특정 에이전트를 호출해서 스트리밍 방식으로 응답을 반환합니다.
     """
     try:
-        agent = manager.load_agent(req.agent_id)
+        agent = await manager.load_agent(req.agent_id)
         if not agent:
             raise HTTPException(status_code=500, detail="메인 에이전트를 찾을 수 없습니다.")
     except Exception as e:
@@ -76,7 +76,7 @@ async def run_main_agent_stream(req: AgentRequestDTO):
 
     async def event_generator():
         try:
-            manager.save_chat_history(ChatMessageDTO(
+            await manager.save_chat_history(ChatMessageDTO(
                 agent_id=req.agent_id,
                 sub=req.sub,
                 role="user",
@@ -105,7 +105,7 @@ async def run_main_agent_stream(req: AgentRequestDTO):
                 if event.type == "response.completed":
                     response_id = event.response.id
                     try:
-                        manager.save_chat_history(ChatMessageDTO(
+                        await manager.save_chat_history(ChatMessageDTO(
                             agent_id=req.agent_id,
                             sub=req.sub,
                             role="assistant",
