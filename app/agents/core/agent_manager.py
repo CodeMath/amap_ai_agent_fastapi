@@ -3,6 +3,7 @@ from typing import List, Optional
 import aioboto3
 import os
 import logging
+from decimal import Decimal
 from agents import Agent, ModelSettings
 from agents._config import set_default_openai_key
 from dotenv import load_dotenv
@@ -11,6 +12,7 @@ from app.agents.schemas.agent_schemas import AgentDTO
 from app.agents.schemas.chat_schemas import AiAgentMessageDTO, ChatMessageDTO
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 load_dotenv()
 
@@ -56,27 +58,32 @@ class AgentManager:
 
     async def filter_agents(self, latitude: float, longitude: float) -> List[AgentDTO]:
         """
-        위도/경도 기준으로 반경 500m 이내의 에이전트를 조회합니다.
+        위도/경도 기준으로 반경 1000m 이내의 에이전트를 조회합니다.
         :param latitude: 중심 위도
         :param longitude: 중심 경도
         :return: AgentDTO 리스트
         """
         try:
+            lat_min = Decimal(str(latitude - 0.009))  # ~1000m
+            lat_max = Decimal(str(latitude + 0.009))
+            lon_min = Decimal(str(longitude - 0.009))
+            lon_max = Decimal(str(longitude + 0.009))
+
             async with self.session.resource("dynamodb", region_name=self.region_name) as dynamodb:
                 table = await dynamodb.Table(self.table_name)
-                response = await table.query(
-                    IndexName="LocationIndex",
-                    KeyConditionExpression=(
-                        "latitude BETWEEN :lat_min AND :lat_max AND "
-                        "longitude BETWEEN :lon_min AND :lon_max"
-                    ),
+                
+                # 스캔 작업으로 필터링
+                response = await table.scan(
+                    FilterExpression="latitude >= :lat_min AND latitude <= :lat_max AND longitude >= :lon_min AND longitude <= :lon_max",
                     ExpressionAttributeValues={
-                        ":lat_min": latitude - 0.0045,  # ~500m
-                        ":lat_max": latitude + 0.0045,
-                        ":lon_min": longitude - 0.0045,
-                        ":lon_max": longitude + 0.0045
+                        ":lat_min": lat_min,
+                        ":lat_max": lat_max,
+                        ":lon_min": lon_min,
+                        ":lon_max": lon_max
                     }
                 )
+                
+                logger.info(f"response: {response}")
                 items = response.get("Items", [])
                 return [AgentDTO(**item) for item in items]
         except Exception as e:
@@ -105,8 +112,8 @@ class AgentManager:
             tools=[],
             model=agent_dto.model,
             model_settings=ModelSettings(
-                temperature=0.1,  # 결정적 응답으로 속도 향상
-                max_tokens=150,  # 필요한 만큼만 토큰 생성
+                temperature=0.3,  # 결정적 응답으로 속도 향상
+                max_tokens=170,  # 필요한 만큼만 토큰 생성
             ),
         )
         return agent

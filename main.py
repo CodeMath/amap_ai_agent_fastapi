@@ -1,9 +1,10 @@
 import logging
 from typing import Dict, Any
-
-from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Depends, HTTPException, status, APIRouter, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from app.agents.api.user_router import public_router
 from jose import JWTError, jwt
 
 from dependencies import init_app
@@ -12,8 +13,19 @@ from app.agents.api.agent_router import router as agent_router
 SECRET_KEY: str = "g34qytgarteh4w6uj46srtjnssw46iujsyjfgjh675wui5sryjf"
 ALGORITHM: str = "HS256"
 
+# Lambda 환경에 맞는 로깅 설정
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logger.setLevel(logging.INFO)
+
+# 로그 포맷 설정
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+# 기존 로거들도 동일한 레벨로 설정
+for name in logging.root.manager.loggerDict:
+    logging.getLogger(name).setLevel(logging.INFO)
 
 security = HTTPBearer()
 
@@ -41,34 +53,30 @@ async def get_current_user(
             detail="토큰 검증 실패",
         )
 
-class JwtUserForm(BaseModel):
-    """
-    JWT 발급을 위한 사용자 정보 입력 폼
-    """
-    sub: str
-    password: str
+app = FastAPI(on_startup=[init_app])
 
-public_router = APIRouter(tags=["public"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 실제 운영 환경에서는 특정 도메인만 허용하도록 수정해야 합니다
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*", "Authorization", "Content-Type"],
+    expose_headers=["Authorization"],
+    max_age=3600,
+)
 
-@public_router.post("/login", dependencies=[])
-async def login(req: JwtUserForm) -> Dict[str, str]:
-    """
-    JWT를 발급하는 로그인 엔드포인트
-    """
-    if req.sub != "codemath" or req.password != "!Q2w3e4r5t":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="사용자 정보가 올바르지 않습니다.",
-        )
-    access_token: str = jwt.encode({"sub": req.sub}, SECRET_KEY, algorithm=ALGORITHM)
-    return {"access_token": access_token, "token_type": "Bearer"}
-
+# API 라우터 등록
 protected_router = APIRouter(
     prefix="/api",
     dependencies=[Depends(get_current_user)],
 )
 protected_router.include_router(agent_router)
 
-app = FastAPI(on_startup=[init_app])
-app.include_router(public_router)
+# URL 라우터 등록
 app.include_router(protected_router)
+# 회원가입/로그인 URL 라우터
+app.include_router(public_router)
+
+from mangum import Mangum
+
+handler = Mangum(app)

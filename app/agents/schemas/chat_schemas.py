@@ -20,8 +20,7 @@ class AiAgentMessageDTO(BaseModel):
     content: str  # 메시지 내용
 
 
-class AgentRequestDTO(BaseModel):
-    sub: str  # 사용자 uuid
+class AgentRequestDTO(BaseModel):    
     agent_id: str  # 에이전트 아이디
     data: Any  # 메시지 내용
     response_id: Optional[str] = None  # 이전 응답 id
