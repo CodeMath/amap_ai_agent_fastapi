@@ -126,9 +126,21 @@ async def run_main_agent_stream(req: AgentRequestDTO, sub: str = Depends(get_sub
                 response_id=None if req.response_id is None else req.response_id,
             ))
 
+            # 채팅 히스토리를 적절한 형식으로 변환
+            formatted_history = []
+            for msg in chat_history:
+                formatted_history.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+            formatted_history.append({
+                "role": "user",
+                "content": req.data
+            })
+
             result = Runner.run_streamed(
                 agent,
-                input=str(chat_history + [{"role": "user", "content": req.data}]),
+                input=formatted_history,
                 previous_response_id=req.response_id if req.response_id else None,
                 run_config=RunConfig(
                     tracing_disabled=True,
@@ -139,13 +151,15 @@ async def run_main_agent_stream(req: AgentRequestDTO, sub: str = Depends(get_sub
 
             # 이벤트 스트리밍
             async for event in result.stream_events():
-                logger.info(
-                    f"-----*-----*-----*-----*\n{event}\n-----*-----*-----*-----*"
-                )
+                # logger.info(
+                #     f"-----*-----*-----*-----*\n{event}\n-----*-----*-----*-----*"
+                # )
                 # 응답 ID 저장 (마지막 응답에서 사용)
                 try:
                     response_id = event.data.response.id
-                    logger.info(f">>>>> response_id: {response_id}")
+                    logger.info(
+                        f"-----*-----*-----*-----*\n{event}\n-----*-----*-----*-----*"
+                    )
                     try:
                         if not save_chat:
                             save_chat = True

@@ -4,7 +4,7 @@ import aioboto3
 import os
 import logging
 from decimal import Decimal
-from agents import Agent, ModelSettings
+from agents import Agent, ModelSettings, WebSearchTool
 from agents._config import set_default_openai_key
 from dotenv import load_dotenv
 from boto3.dynamodb.conditions import Key
@@ -108,12 +108,27 @@ class AgentManager:
         agent_dto = await self.get_agent(agent_id)
         agent = Agent(
             name=agent_dto.name,
-            instructions=agent_dto.prompt,
-            tools=[],
+            instructions=f"""
+            당신은 {agent_dto.name} 에이전트 챗봇 입니다.
+            * 웹검색 기반으로 모르는 부분에 대해 최신 정보를 검색해서 반드시 {datetime.datetime.now().strftime('%Y-%m-%d')} 기준 최신 정보로 답변해야 합니다.
+            * 웹검색 기반으로 답변 시, 해당 챗봇과 관련없는 내용은 답변하면 안됩니다.
+            * 출력 토큰은 170 토큰 미만으로 만 사용해야 합니다.
+            * 170 토큰 이상 사용 시 다시 답변을 준비해야합니다.
+
+            {agent_dto.prompt}
+            """,
+            tools=[
+                WebSearchTool()
+            ],
             model=agent_dto.model,
             model_settings=ModelSettings(
-                temperature=0.3,  # 결정적 응답으로 속도 향상
-                max_tokens=170,  # 필요한 만큼만 토큰 생성
+                tool_choice="auto",
+                parallel_tool_calls=True,
+                truncation='auto',
+                temperature=0.2,  # 결정적 응답으로 속도 향상
+                frequency_penalty=0.1,
+                presence_penalty=0.1,
+                max_tokens=169,  # 필요한 만큼만 토큰 생성
             ),
         )
         return agent
