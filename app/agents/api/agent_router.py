@@ -8,10 +8,11 @@ from jose import jwt
 from agents import RunConfig, Runner
 from pydantic import ValidationError
 
+from app.agents.core.achivement_manager import AgentAchievements
 from app.agents.core.agent_manager import AgentManager
-from app.agents.schemas.agent_schemas import AgentDTO
+from app.agents.schemas.achivement_schemas import AchievementDTO, AchievementGeneratorOutput
+from app.agents.schemas.agent_schemas import AgentDTO, UpdatePromptDTO
 from app.agents.schemas.chat_schemas import AgentRequestDTO, ChatMessageDTO
-from app.agents.schemas.map_schemas import AgentMapDTO, MapDTO
 
 SECRET_KEY = "g34qytgarteh4w6uj46srtjnssw46iujsyjfgjh675wui5sryjf"
 ALGORITHM = "HS256"
@@ -22,6 +23,7 @@ logger.setLevel(logging.INFO)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 manager = AgentManager()
+achievement_manager = AgentAchievements()
 
 security = HTTPBearer()
 
@@ -33,6 +35,7 @@ async def get_sub_from_token(credentials: HTTPAuthorizationCredentials = Depends
         return payload.get("sub")
     except Exception as e:
         raise HTTPException(status_code=401, detail="인증에 실패했습니다.")
+
 
 @router.get("/list", response_model=List[AgentDTO])
 async def get_agent_list(latitude: float = -90, longitude: float = -180):
@@ -67,6 +70,7 @@ async def get_agent(agent_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}")
 
+
 # Agent 추가, 수정, 삭제 API
 @router.post("/register")
 async def register_agent(req: AgentDTO):
@@ -75,14 +79,16 @@ async def register_agent(req: AgentDTO):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}")
 
-@router.put("/update_prompt/{agent_id}")
-async def update_agent_prompt(agent_id: str, prompt: str):
+
+@router.put("/{agent_id}/update-prompt")
+async def update_agent_prompt(agent_id: str, req: UpdatePromptDTO):
     try:
-        return await manager.update_agent_prompt(agent_id, prompt)
+        return await manager.update_agent_prompt(agent_id, req.prompt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}")
 
-@router.delete("/delete/{agent_id}")
+
+@router.delete("/{agent_id}/delete")
 async def delete_agent(agent_id: str):
     try:
         return await manager.delete_agent(agent_id)
@@ -98,6 +104,15 @@ async def get_chat_history(agent_id: str, sub: str = Depends(get_sub_from_token)
         return history
     except Exception as e:
         logger.error(f"get_chat_history error: {e}")
+        raise HTTPException(status_code=500, detail=f"{e}")
+
+
+@router.delete("/{agent_id}/delete-history")
+async def delete_agent_history(agent_id: str, sub: str = Depends(get_sub_from_token)):
+    try:
+        result = await manager.delete_agent_history(sub, agent_id)
+        return result
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}")
 
 
@@ -222,3 +237,11 @@ async def run_main_agent_stream(req: AgentRequestDTO, sub: str = Depends(get_sub
             "Connection": "keep-alive",
         },
     )
+
+
+@router.post("/{agent_id}/generate-achievements", response_model=AchievementGeneratorOutput)
+async def generate_achievements(agent_id: str, sub: str = Depends(get_sub_from_token)):
+    try:
+        return await achievement_manager.generate_chat_and_achievements(agent_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")

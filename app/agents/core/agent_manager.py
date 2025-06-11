@@ -16,16 +16,22 @@ logger.setLevel(logging.INFO)
 
 load_dotenv()
 
-# 다이나모 디비에 등록된 에이전트 정보 조회 및 등록 API
 
-
-class AgentManager:
+class DynamoDBManager:
     def __init__(self):
-        self.set_default_openai_key()
         self.session = aioboto3.Session()
         self.region_name = "ap-northeast-2"
         self.table_name = "map_agents"
         self.chat_history_table_name = "map_agent_history"
+        # 챗봇 업적 테이블 이름
+        self.achievement_table_name = "map_agent_achievements"
+        # 챗봇 업적 사용자 테이블 이름
+        self.user_achievement_table_name = "map_user_achievements"
+
+class AgentManager(DynamoDBManager):
+    def __init__(self):
+        super().__init__()
+        self.set_default_openai_key()
 
     def set_default_openai_key(self):
         set_default_openai_key(os.getenv("OPENAI_API_KEY"), True)
@@ -71,7 +77,7 @@ class AgentManager:
 
             async with self.session.resource("dynamodb", region_name=self.region_name) as dynamodb:
                 table = await dynamodb.Table(self.table_name)
-                
+
                 # 스캔 작업으로 필터링
                 response = await table.scan(
                     FilterExpression="latitude >= :lat_min AND latitude <= :lat_max AND longitude >= :lon_min AND longitude <= :lon_max",
@@ -82,7 +88,7 @@ class AgentManager:
                         ":lon_max": lon_max
                     }
                 )
-                
+
                 logger.info(f"response: {response}")
                 items = response.get("Items", [])
                 return [AgentDTO(**item) for item in items]
@@ -110,11 +116,12 @@ class AgentManager:
             name=agent_dto.name,
             instructions=f"""
             당신은 {agent_dto.name} 에이전트 챗봇 입니다.
-            * 웹검색 기반으로 모르는 부분에 대해 최신 정보를 검색해서 반드시 {datetime.datetime.now().strftime('%Y-%m-%d')} 기준 최신 정보로 답변해야 합니다.
+            * 주어진 정보 외의 정보는 웹검색 툴을 기반으로, 최신 정보를 검색해서 반드시 {datetime.datetime.now().strftime('%Y')} 년도 기준 최신 정보로 답변해야 합니다.
             * 웹검색 기반으로 답변 시, 해당 챗봇과 관련없는 내용은 답변하면 안됩니다.
             * 출력 토큰은 170 토큰 미만으로 만 사용해야 합니다.
             * 170 토큰 이상 사용 시 다시 답변을 준비해야합니다.
 
+            # 프롬프트(역할)
             {agent_dto.prompt}
             """,
             tools=[
@@ -161,6 +168,26 @@ class AgentManager:
         except Exception as e:
             logger.error(f"채팅 히스토리 조회 중 오류 발생: {str(e)}")
             return []
+
+    async def delete_agent_history(self, sub: str, agent_id: str) -> List[ChatMessageDTO]:
+        async with self.session.resource("dynamodb", region_name=self.region_name) as dynamodb:
+            table = await dynamodb.Table(self.chat_history_table_name)
+            
+            # 먼저 해당 파티션 키의 모든 아이템을 조회
+            response = await table.query(
+                KeyConditionExpression=Key("sub#agent_id").eq(f"{sub}#{agent_id}")
+            )
+            
+            # 각 아이템을 삭제
+            for item in response.get("Items", []):
+                await table.delete_item(
+                    Key={
+                        "sub#agent_id": f"{sub}#{agent_id}",
+                        "timestamp": item["timestamp"]
+                    }
+                )
+            
+            return {"message": "success"}
 
     async def update_agent_prompt(self, agent_id: str, new_prompt: str) -> Optional[AgentDTO]:
         """

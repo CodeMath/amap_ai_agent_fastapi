@@ -22,5 +22,9 @@ class AgentDTO(BaseModel):
     longitude: Decimal  # 경도
 
 
+class UpdatePromptDTO(BaseModel):
+    prompt: str  # 에이전트 프롬프트
+
+
 class AgentListDTO(BaseModel):
     agents: List[AgentDTO]  # 에이전트 리스트
