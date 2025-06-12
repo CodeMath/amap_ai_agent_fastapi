@@ -107,11 +107,26 @@ async def get_chat_history(agent_id: str, sub: str = Depends(get_sub_from_token)
         raise HTTPException(status_code=500, detail=f"{e}")
 
 
+@router.get("/chat/list")
+async def get_chat_list(sub: str = Depends(get_sub_from_token)):
+    try:
+        return await manager.get_chat_list(sub)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
+
+
 @router.delete("/{agent_id}/delete-history")
 async def delete_agent_history(agent_id: str, sub: str = Depends(get_sub_from_token)):
     try:
         result = await manager.delete_agent_history(sub, agent_id)
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{e}")
+
+@router.post("/{agent_id}/add-achievements")
+async def add_achievement_to_agent(agent_id: str, req: List[AchievementDTO]):
+    try:
+        return await manager.add_achievement_to_agent(agent_id, req)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}")
 

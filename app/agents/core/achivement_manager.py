@@ -9,8 +9,6 @@ from litellm import BaseModel
 
 from app.agents.core.agent_manager import AgentManager, DynamoDBManager
 from app.agents.schemas.achivement_schemas import AchievementDTO, AchievementGeneratorOutput
-from app.agents.schemas.agent_schemas import AgentDTO
-from app.agents.schemas.chat_schemas import AiAgentMessageDTO
 
 
 logger = logging.getLogger(__name__)
@@ -123,7 +121,8 @@ class AgentAchievements(DynamoDBManager):
                     input=f"""다음 챗봇과 이야기를 하게 됩니다. 챗봇의 정보는 다음과 같습니다.
                     {agent_dto.model_dump_json()}
 
-                    주어진 챗봇 정보를 통해 처음 시작 대화를 작성해야 합니다.
+                    # 위 정보와 히스토리를 기반으로 다음 대화를 이어나가야합니다.
+                    이어나가기 위한 대화 내용을 작성합니다. 처음 대화는 챗봇의 정보를 너의 페르소나로 대화를 시작해야합니다.
                     """,
                     run_config=RunConfig(
                         tracing_disabled=True,
@@ -184,9 +183,7 @@ class AgentAchievements(DynamoDBManager):
                 ),
             )
 
-            if judgement.final_output.more:
-                continue
-            else:
+            if judgement.final_output.sufficient:
                 achievement_generator_input = await Runner.run(
                     self.achievement_generator,
                     input=formatted_history,

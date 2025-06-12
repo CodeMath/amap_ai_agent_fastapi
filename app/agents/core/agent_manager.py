@@ -8,6 +8,7 @@ from agents import Agent, ModelSettings, WebSearchTool
 from agents._config import set_default_openai_key
 from dotenv import load_dotenv
 from boto3.dynamodb.conditions import Key
+from app.agents.schemas.achivement_schemas import AchievementDTO
 from app.agents.schemas.agent_schemas import AgentDTO
 from app.agents.schemas.chat_schemas import AiAgentMessageDTO, ChatMessageDTO
 
@@ -27,6 +28,7 @@ class DynamoDBManager:
         self.achievement_table_name = "map_agent_achievements"
         # 챗봇 업적 사용자 테이블 이름
         self.user_achievement_table_name = "map_user_achievements"
+
 
 class AgentManager(DynamoDBManager):
     def __init__(self):
@@ -168,6 +170,53 @@ class AgentManager(DynamoDBManager):
         except Exception as e:
             logger.error(f"채팅 히스토리 조회 중 오류 발생: {str(e)}")
             return []
+    
+    async def get_chat_list(self, sub: str) -> List[AgentDTO]:
+        """
+        특정 사용자의 챗봇과의 대화 내역을 조회합니다.
+        특정 챗봇과의 대화를 진행한 경우에만 필터링 되어 조회
+        agent_id 기준으로 중복 없이 조회
+        :param sub: 사용자 식별자
+        :return: 시간순으로 정렬된 AgentDTO 리스트
+        """
+        try:
+            async with self.session.resource("dynamodb", region_name=self.region_name) as dynamodb:
+                table = await dynamodb.Table(self.chat_history_table_name)
+                # scan 작업으로 sub 필터링하여 agent_id 목록 가져오기
+                scan_response = await table.scan(
+                    FilterExpression="begins_with(#sub_agent_id, :sub_prefix)",
+                    ExpressionAttributeNames={
+                        "#sub_agent_id": "sub#agent_id"
+                    },
+                    ExpressionAttributeValues={
+                        ":sub_prefix": f"{sub}#"
+                    },
+                    ProjectionExpression="agent_id"
+                )
+                unique_agent_ids = list(set(item["agent_id"] for item in scan_response.get("Items", [])))
+                # 각 agent_id에 대해 가장 최근 대화 조회
+                latest_chats = []
+                for agent_id in unique_agent_ids:
+                    # 각 agent_id별로 가장 최근 대화 조회
+                    query_response = await table.query(
+                        KeyConditionExpression=Key("sub#agent_id").eq(f"{sub}#{agent_id}"),
+                        ScanIndexForward=False,  # 내림차순 정렬 (최신순)
+                        Limit=1,  # 가장 최근 1개만 조회
+                    )
+
+                    if query_response.get("Items"):
+                        latest_item = query_response["Items"][0]
+                        latest_chats.append({
+                            "agent_id": latest_item["agent_id"],
+                            "content": latest_item["content"],
+                            "timestamp": latest_item["timestamp"]
+                        })
+                # latest_chats 정렬 최신 시간순으로
+                latest_chats.sort(key=lambda x: x["timestamp"], reverse=True)
+                return latest_chats
+        except Exception as e:
+            logger.error(f"채팅 히스토리 조회 중 오류 발생: {str(e)}")
+            return []
 
     async def delete_agent_history(self, sub: str, agent_id: str) -> List[ChatMessageDTO]:
         async with self.session.resource("dynamodb", region_name=self.region_name) as dynamodb:
@@ -212,6 +261,43 @@ class AgentManager(DynamoDBManager):
                     UpdateExpression="SET prompt = :prompt",
                     ExpressionAttributeValues={
                         ":prompt": new_prompt
+                    },
+                    ReturnValues="ALL_NEW"
+                )
+                
+                updated_item = response.get("Attributes")
+                if updated_item:
+                    return AgentDTO(**updated_item)
+                return None
+                
+        except Exception as e:
+            logger.error(f"에이전트 프롬프트 수정 중 오류 발생: {str(e)}")
+            return None
+    
+    async def add_achievement_to_agent(self, agent_id: str, achievements: List[AchievementDTO]) -> Optional[AgentDTO]:
+        """
+        에이전트의 업적을 추가 합니다.
+        :param agent_id: 수정할 에이전트의 ID
+        :param achievements: 추가할 업적 리스트
+        :return: 수정된 AgentDTO 또는 None (에이전트가 존재하지 않는 경우)
+        """
+        try:
+            async with self.session.resource("dynamodb", region_name=self.region_name) as dynamodb:
+                table = await dynamodb.Table(self.table_name)
+                
+                # 에이전트 존재 여부 확인
+                agent = await self.get_agent(agent_id)
+                if agent is None:
+                    logger.error(f"에이전트를 찾을 수 없습니다: {agent_id}")
+                    return None
+                
+                # 업적 업데이트: 기존 업적 리스트에 새로운 업적 추가
+                response = await table.update_item(
+                    Key={"agent_id": agent_id},
+                    UpdateExpression="SET achievements = list_append(if_not_exists(achievements, :empty_list), :achievements)",
+                    ExpressionAttributeValues={
+                        ":achievements": achievements,
+                        ":empty_list": []
                     },
                     ReturnValues="ALL_NEW"
                 )
