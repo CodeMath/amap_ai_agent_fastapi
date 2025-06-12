@@ -123,6 +123,7 @@ async def delete_agent_history(agent_id: str, sub: str = Depends(get_sub_from_to
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{e}")
 
+
 @router.post("/{agent_id}/add-achievements")
 async def add_achievement_to_agent(agent_id: str, req: List[AchievementDTO]):
     try:

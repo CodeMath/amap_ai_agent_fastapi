@@ -1,5 +1,5 @@
 import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import aioboto3
 import os
 import logging
@@ -284,28 +284,47 @@ class AgentManager(DynamoDBManager):
         try:
             async with self.session.resource("dynamodb", region_name=self.region_name) as dynamodb:
                 table = await dynamodb.Table(self.table_name)
-                
+
                 # 에이전트 존재 여부 확인
                 agent = await self.get_agent(agent_id)
                 if agent is None:
                     logger.error(f"에이전트를 찾을 수 없습니다: {agent_id}")
                     return None
                 
-                # 업적 업데이트: 기존 업적 리스트에 새로운 업적 추가
+                for achievement in achievements:
+                    print(achievement)
+                    logger.info(f"achievement: {achievement}")
+                
+                # 현재 업적 개수 확인
+                current_agent = await self.get_agent(agent_id)
+                current_achievements = current_agent.achievements or []
+                
+                # 업적이 30개 이상이면 추가하지 않음
+                if len(current_achievements) >= 30:
+                    logger.warning(f"에이전트 {agent_id}의 업적이 이미 30개 이상입니다. 추가 업적이 무시됩니다.")
+                    return current_agent
+                
+                # DynamoDB 업적 리스트 형식으로 변환
+                achievement_dicts = [achievement.model_dump() for achievement in achievements]
+                
+                # 남은 업적 슬롯 계산
+                remaining_slots = 30 - len(current_achievements)
+                if len(achievement_dicts) > remaining_slots:
+                    achievement_dicts = achievement_dicts[:remaining_slots]
+                    logger.warning(f"업적이 {remaining_slots}개만 추가됩니다. (최대 30개 제한)")
+                
                 response = await table.update_item(
                     Key={"agent_id": agent_id},
                     UpdateExpression="SET achievements = list_append(if_not_exists(achievements, :empty_list), :achievements)",
                     ExpressionAttributeValues={
-                        ":achievements": achievements,
+                        ":achievements": achievement_dicts,
                         ":empty_list": []
                     },
                     ReturnValues="ALL_NEW"
                 )
                 
-                updated_item = response.get("Attributes")
-                if updated_item:
-                    return AgentDTO(**updated_item)
-                return None
+                updated_agent = await self.get_agent(agent_id)
+                return updated_agent
                 
         except Exception as e:
             logger.error(f"에이전트 프롬프트 수정 중 오류 발생: {str(e)}")

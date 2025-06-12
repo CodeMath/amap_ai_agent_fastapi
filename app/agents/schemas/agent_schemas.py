@@ -3,6 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
+from app.agents.schemas.achivement_schemas import AchievementDTO
+
 
 class AgentToolDTO(BaseModel):
     name: str  # 도구 이름
@@ -20,6 +22,7 @@ class AgentDTO(BaseModel):
     model: str  # 에이전트 모델
     latitude: Decimal  # 위도
     longitude: Decimal  # 경도
+    achievements: Optional[List[AchievementDTO]]  # 에이전트 업적
 
 
 class UpdatePromptDTO(BaseModel):
