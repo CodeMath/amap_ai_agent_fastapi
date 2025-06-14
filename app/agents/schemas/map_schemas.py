@@ -1,5 +1,6 @@
-from typing import List
 from decimal import Decimal
+from typing import List
+
 from pydantic import BaseModel
 
 from app.agents.schemas.agent_schemas import AgentDTO

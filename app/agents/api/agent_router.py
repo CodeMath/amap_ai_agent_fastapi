@@ -1,16 +1,20 @@
 # app/api/agent_router.py
 import logging
 from typing import List
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt
-from agents import RunConfig, Runner
 from pydantic import ValidationError
 
+from agents import RunConfig, Runner
 from app.agents.core.achivement_manager import AgentAchievements
 from app.agents.core.agent_manager import AgentManager
-from app.agents.schemas.achivement_schemas import AchievementDTO, AchievementGeneratorOutput
+from app.agents.schemas.achivement_schemas import (
+    AchievementDTO,
+    AchievementGeneratorOutput,
+)
 from app.agents.schemas.agent_schemas import AgentDTO, UpdatePromptDTO
 from app.agents.schemas.chat_schemas import AgentRequestDTO, ChatMessageDTO
 
@@ -28,7 +32,9 @@ achievement_manager = AgentAchievements()
 security = HTTPBearer()
 
 
-async def get_sub_from_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+async def get_sub_from_token(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> str:
     try:
         token = credentials.credentials
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -133,7 +139,9 @@ async def add_achievement_to_agent(agent_id: str, req: List[AchievementDTO]):
 
 
 @router.post("/run-stream")
-async def run_main_agent_stream(req: AgentRequestDTO, sub: str = Depends(get_sub_from_token)):
+async def run_main_agent_stream(
+    req: AgentRequestDTO, sub: str = Depends(get_sub_from_token)
+):
     """
     특정 에이전트를 호출해서 스트리밍 방식으로 응답을 반환합니다.
     """
@@ -141,33 +149,31 @@ async def run_main_agent_stream(req: AgentRequestDTO, sub: str = Depends(get_sub
         agent = await manager.load_agent(req.agent_id)
         chat_history = await manager.get_chat_history(sub, req.agent_id)
         if not agent:
-            raise HTTPException(status_code=500, detail="메인 에이전트를 찾을 수 없습니다.")
+            raise HTTPException(
+                status_code=500, detail="메인 에이전트를 찾을 수 없습니다."
+            )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"{e}")    
+        raise HTTPException(status_code=500, detail=f"{e}")
 
     async def event_generator():
         response_context = ""
         try:
-            await manager.save_chat_history(ChatMessageDTO(
-                agent_id=req.agent_id,
-                sub=sub,
-                role="user",
-                content=req.data,
-                context=None,
-                response_id=None if req.response_id is None else req.response_id,
-            ))
+            await manager.save_chat_history(
+                ChatMessageDTO(
+                    agent_id=req.agent_id,
+                    sub=sub,
+                    role="user",
+                    content=req.data,
+                    context=None,
+                    response_id=None if req.response_id is None else req.response_id,
+                )
+            )
 
             # 채팅 히스토리를 적절한 형식으로 변환
             formatted_history = []
             for msg in chat_history:
-                formatted_history.append({
-                    "role": msg.role,
-                    "content": msg.content
-                })
-            formatted_history.append({
-                "role": "user",
-                "content": req.data
-            })
+                formatted_history.append({"role": msg.role, "content": msg.content})
+            formatted_history.append({"role": "user", "content": req.data})
 
             result = Runner.run_streamed(
                 agent,
@@ -194,14 +200,16 @@ async def run_main_agent_stream(req: AgentRequestDTO, sub: str = Depends(get_sub
                     try:
                         if not save_chat:
                             save_chat = True
-                            await manager.save_chat_history(ChatMessageDTO(
-                                agent_id=req.agent_id,
-                                sub=sub,
-                                role="assistant",
-                                content=event.response.output.text,
-                                context=None,
-                                response_id=response_id,
-                            ))
+                            await manager.save_chat_history(
+                                ChatMessageDTO(
+                                    agent_id=req.agent_id,
+                                    sub=sub,
+                                    role="assistant",
+                                    content=event.response.output.text,
+                                    context=None,
+                                    response_id=response_id,
+                                )
+                            )
                             yield f"data: RESPONSE_ID:{response_id}\n\n"
                     except Exception as e:
                         pass
@@ -218,9 +226,9 @@ async def run_main_agent_stream(req: AgentRequestDTO, sub: str = Depends(get_sub
                                     yield "data: <br><br>\n\n"
                                 else:
                                     yield f"data: {event.data.delta}\n\n"
-                                
+
                                 response_context += event.data.delta
-                                
+
                     except Exception:
                         pass
 
@@ -235,15 +243,17 @@ async def run_main_agent_stream(req: AgentRequestDTO, sub: str = Depends(get_sub
             yield f"data: ERROR:{str(e)}\n\n"
             yield "data: [RETRY]\n\n]"
             yield "data: [DONE]\n\n"
-        
-        await manager.save_chat_history(ChatMessageDTO(
-            agent_id=req.agent_id,
-            sub=sub,
-            role="assistant",
-            content=response_context,
-            context=None,
-            response_id=response_id,
-        ))
+
+        await manager.save_chat_history(
+            ChatMessageDTO(
+                agent_id=req.agent_id,
+                sub=sub,
+                role="assistant",
+                content=response_context,
+                context=None,
+                response_id=response_id,
+            )
+        )
 
     return StreamingResponse(
         event_generator(),
@@ -255,7 +265,9 @@ async def run_main_agent_stream(req: AgentRequestDTO, sub: str = Depends(get_sub
     )
 
 
-@router.post("/{agent_id}/generate-achievements", response_model=AchievementGeneratorOutput)
+@router.post(
+    "/{agent_id}/generate-achievements", response_model=AchievementGeneratorOutput
+)
 async def generate_achievements(agent_id: str, sub: str = Depends(get_sub_from_token)):
     try:
         return await achievement_manager.generate_chat_and_achievements(agent_id)

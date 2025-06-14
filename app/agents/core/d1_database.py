@@ -1,14 +1,14 @@
-import httpx
 import datetime
-import hashlib
-import os
 import logging
+import os
 import uuid
-from fastapi import Request, Depends, HTTPException
 from typing import Any, Dict
-from passlib.context import CryptContext
-from app.agents.schemas.user_schemas import UserSignupRequest
 
+import httpx
+from fastapi import HTTPException
+from passlib.context import CryptContext
+
+from app.agents.schemas.user_schemas import UserSignupRequest
 
 # 로거 설정
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class D1Database:
     def __init__(self):
         self.header = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {os.getenv('D1_DATABASE_TOKEN')}"
+            "Authorization": f"Bearer {os.getenv('D1_DATABASE_TOKEN')}",
         }
         self.url = os.getenv("D1_DATABASE_QUERY_URL")
 
@@ -52,11 +52,15 @@ class D1Database:
         logger.info(f"D1 유저네임 중복 처리 쿼리 실행: {sql}")
 
         async with httpx.AsyncClient() as client:
-            response = await client.post(self.url, headers=self.header, json={"sql": sql, "params": params})
+            response = await client.post(
+                self.url, headers=self.header, json={"sql": sql, "params": params}
+            )
             results = response.json()
             print(results)
-            logger.info(f"D1 유저네임 중복 처리 쿼리 결과: {results['result'][0]['results'][0]['COUNT(*)']}")
-            return results['result'][0]['results'][0]['COUNT(*)']
+            logger.info(
+                f"D1 유저네임 중복 처리 쿼리 결과: {results['result'][0]['results'][0]['COUNT(*)']}"
+            )
+            return results["result"][0]["results"][0]["COUNT(*)"]
 
     async def user_signup(self, body: UserSignupRequest) -> Any:
         """
@@ -84,7 +88,9 @@ class D1Database:
             raise HTTPException(status_code=400, detail="이미 존재하는 유저네임입니다.")
 
         async with httpx.AsyncClient() as client:
-            response = await client.post(self.url, headers=self.header, json={"sql": sql, "params": params})
+            response = await client.post(
+                self.url, headers=self.header, json={"sql": sql, "params": params}
+            )
 
             return response.json()
 
@@ -98,8 +104,10 @@ class D1Database:
         params = [username]
 
         async with httpx.AsyncClient() as client:
-            response = await client.post(self.url, headers=self.header, json={"sql": sql, "params": params})
-            return response.json()['result'][0]['results'][0]['sub']
+            response = await client.post(
+                self.url, headers=self.header, json={"sql": sql, "params": params}
+            )
+            return response.json()["result"][0]["results"][0]["sub"]
 
     async def get_user_info(self, username: str) -> Dict[str, Any]:
         """
@@ -111,5 +119,7 @@ class D1Database:
         params = [username]
 
         async with httpx.AsyncClient() as client:
-            response = await client.post(self.url, headers=self.header, json={"sql": sql, "params": params})
-            return response.json()['result'][0]['results'][0]
+            response = await client.post(
+                self.url, headers=self.header, json={"sql": sql, "params": params}
+            )
+            return response.json()["result"][0]["results"][0]

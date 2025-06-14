@@ -1,14 +1,15 @@
 import logging
-from typing import Dict, Any
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, Depends, HTTPException, status, APIRouter, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import JSONResponse
-from app.agents.api.user_router import public_router
-from jose import JWTError, jwt
+from typing import Any, Dict
 
-from dependencies import init_app
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+from mangum import Mangum
+
 from app.agents.api.agent_router import router as agent_router
+from app.agents.api.user_router import public_router
+from dependencies import init_app
 
 SECRET_KEY: str = "g34qytgarteh4w6uj46srtjnssw46iujsyjfgjh675wui5sryjf"
 ALGORITHM: str = "HS256"
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # 로그 포맷 설정
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
 logger.addHandler(handler)
@@ -28,6 +29,7 @@ for name in logging.root.manager.loggerDict:
     logging.getLogger(name).setLevel(logging.INFO)
 
 security = HTTPBearer()
+
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -53,11 +55,14 @@ async def get_current_user(
             detail="토큰 검증 실패",
         )
 
+
 app = FastAPI(on_startup=[init_app])
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 실제 운영 환경에서는 특정 도메인만 허용하도록 수정해야 합니다
+    allow_origins=[
+        "*"
+    ],  # 실제 운영 환경에서는 특정 도메인만 허용하도록 수정해야 합니다
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*", "Authorization", "Content-Type"],
@@ -77,6 +82,5 @@ app.include_router(protected_router)
 # 회원가입/로그인 URL 라우터
 app.include_router(public_router)
 
-from mangum import Mangum
-
+# AWS Lambda 환경에 맞는 람다 핸들러 설정
 handler = Mangum(app)

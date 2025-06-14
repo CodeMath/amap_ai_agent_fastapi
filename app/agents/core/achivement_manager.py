@@ -1,15 +1,17 @@
 # 업적 처리를 위한 클래스
 
-from typing import List
 import logging
+from typing import List
 
-from agents import Agent, ModelSettings, RunConfig, Runner, WebSearchTool
 from boto3.dynamodb.conditions import Key
 from litellm import BaseModel
 
+from agents import Agent, RunConfig, Runner, WebSearchTool
 from app.agents.core.agent_manager import AgentManager, DynamoDBManager
-from app.agents.schemas.achivement_schemas import AchievementDTO, AchievementGeneratorOutput
-
+from app.agents.schemas.achivement_schemas import (
+    AchievementDTO,
+    AchievementGeneratorOutput,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -47,9 +49,7 @@ class AgentAchievements(DynamoDBManager):
             * 반드시 용어와 단어는 웹검색 기반으로 찾은 최신 MZ 감성과 용어, 단어, 컨셉을 유지해야합니다.
             """,
             model="gpt-4o-mini",
-            tools=[
-                WebSearchTool()
-            ],
+            tools=[WebSearchTool()],
         )
 
         self.evaluator = Agent[None](
@@ -104,7 +104,9 @@ class AgentAchievements(DynamoDBManager):
             output_type=AchievementGeneratorOutput,
         )
 
-    async def generate_chat_and_achievements(self, agent_id: str) -> AchievementGeneratorOutput:
+    async def generate_chat_and_achievements(
+        self, agent_id: str
+    ) -> AchievementGeneratorOutput:
         """
         Agent 아이디를 기반으로 챗봇과 대화를 하며 업적 리스트를 생성합니다.
         :param agent_id: Agent 아이디
@@ -131,10 +133,7 @@ class AgentAchievements(DynamoDBManager):
                 chat_init = True
                 logger.info(f"[User] {init_test.final_output}")
                 formatted_history.append(
-                    {
-                        "role": "user",
-                        "content": init_test.final_output
-                    }
+                    {"role": "user", "content": init_test.final_output}
                 )
             else:
                 continue_test = await Runner.run(
@@ -154,10 +153,7 @@ class AgentAchievements(DynamoDBManager):
                 )
                 logger.info(f"[User] {continue_test.final_output}")
                 formatted_history.append(
-                    {
-                        "role": "user",
-                        "content": continue_test.final_output
-                    }
+                    {"role": "user", "content": continue_test.final_output}
                 )
 
             result = await Runner.run(
@@ -169,10 +165,7 @@ class AgentAchievements(DynamoDBManager):
             )
             logger.info(f"[{agent.name}] {result.final_output}")
             formatted_history.append(
-                {
-                    "role": "assistant",
-                    "content": result.final_output
-                }
+                {"role": "assistant", "content": result.final_output}
             )
 
             judgement = await Runner.run(
@@ -197,7 +190,7 @@ class AgentAchievements(DynamoDBManager):
         # AchievementGeneratorOutput 형식으로 변환하여 반환
         return AchievementGeneratorOutput(
             chat_history=achievement_generator_input.final_output.chat_history,
-            achievements=achievement_generator_input.final_output.achievements
+            achievements=achievement_generator_input.final_output.achievements,
         )
 
     async def get_list_agent_achievements(self, agent_id: str) -> List[AchievementDTO]:
@@ -206,7 +199,9 @@ class AgentAchievements(DynamoDBManager):
         :param agent_id: Agent 아이디
         :return: 해당 에이전트 챗봇에서 얻을 수 있는 업적 리스트 전체 반환
         """
-        async with self.session.resource("dynamodb", region_name=self.region_name) as dynamodb:
+        async with self.session.resource(
+            "dynamodb", region_name=self.region_name
+        ) as dynamodb:
             table = await dynamodb.Table(self.achievement_table_name)
             response = await table.query(
                 KeyConditionExpression=Key("agent_id").eq(agent_id)
@@ -219,10 +214,9 @@ class AgentAchievements(DynamoDBManager):
         :param sub: User 아이디
         :return: 해당 사용자가 얻은 업적 리스트 전체 반환
         """
-        async with self.session.resource("dynamodb", region_name=self.region_name) as dynamodb:
+        async with self.session.resource(
+            "dynamodb", region_name=self.region_name
+        ) as dynamodb:
             table = await dynamodb.Table(self.achievement_table_name)
-            response = await table.query(
-                KeyConditionExpression=Key("user_id").eq(sub)
-            )
+            response = await table.query(KeyConditionExpression=Key("user_id").eq(sub))
             return [AchievementDTO(**item) for item in response.get("Items", [])]
-    

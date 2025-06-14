@@ -1,12 +1,12 @@
-import hashlib
 import logging
-from fastapi import APIRouter, status, Depends, HTTPException
+from typing import Dict
+
+from fastapi import APIRouter, HTTPException
+from jose import jwt
 from passlib.context import CryptContext
 
-from typing import Any, Dict
-from app.agents.schemas.user_schemas import UserSignupRequest
 from app.agents.core.d1_database import D1Database, verify_password
-from jose import jwt
+from app.agents.schemas.user_schemas import UserSignupRequest
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -52,11 +52,17 @@ async def signin(req: UserSignupRequest) -> Dict[str, str]:
     d1_db = D1Database()
     try:
         user_info = await d1_db.get_user_info(req.username)
-        if not user_info or not verify_password(req.password, user_info['password']):
+        if not user_info or not verify_password(req.password, user_info["password"]):
             raise HTTPException(status_code=400, detail="비밀번호가 일치하지 않습니다.")
     except Exception as e:
         logger.error(f"로그인 중 예외 발생: {e}")
         raise HTTPException(status_code=400, detail=f"{e} 로그인에 실패했습니다.")
 
-    access_token: str = jwt.encode({"sub": user_info['sub']}, SECRET_KEY, algorithm=ALGORITHM)
-    return {"access_token": access_token, "token_type": "Bearer", "sub": user_info['sub']}
+    access_token: str = jwt.encode(
+        {"sub": user_info["sub"]}, SECRET_KEY, algorithm=ALGORITHM
+    )
+    return {
+        "access_token": access_token,
+        "token_type": "Bearer",
+        "sub": user_info["sub"],
+    }
