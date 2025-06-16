@@ -6,12 +6,14 @@ from typing import List
 from boto3.dynamodb.conditions import Key
 from litellm import BaseModel
 
-from agents import Agent, RunConfig, Runner, WebSearchTool
+from agents import Agent, RunConfig, Runner, WebSearchTool, function_tool
 from app.agents.core.agent_manager import AgentManager, DynamoDBManager
 from app.agents.schemas.achivement_schemas import (
     AchievementDTO,
     AchievementGeneratorOutput,
 )
+from app.agents.schemas.agent_schemas import AgentDTO
+from app.agents.schemas.chat_schemas import AiAgentMessageDTO, ChatMessageDTO
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -193,21 +195,6 @@ class AgentAchievements(DynamoDBManager):
             achievements=achievement_generator_input.final_output.achievements,
         )
 
-    async def get_list_agent_achievements(self, agent_id: str) -> List[AchievementDTO]:
-        """
-        Agent 아이디를 기반으로 업적 리스트를 조회합니다.
-        :param agent_id: Agent 아이디
-        :return: 해당 에이전트 챗봇에서 얻을 수 있는 업적 리스트 전체 반환
-        """
-        async with self.session.resource(
-            "dynamodb", region_name=self.region_name
-        ) as dynamodb:
-            table = await dynamodb.Table(self.achievement_table_name)
-            response = await table.query(
-                KeyConditionExpression=Key("agent_id").eq(agent_id)
-            )
-            return [AchievementDTO(**item) for item in response.get("Items", [])]
-
     async def get_list_user_achievements(self, sub: str) -> List[AchievementDTO]:
         """
         User 아이디를 기반으로 업적 리스트를 조회합니다.
@@ -219,4 +206,77 @@ class AgentAchievements(DynamoDBManager):
         ) as dynamodb:
             table = await dynamodb.Table(self.achievement_table_name)
             response = await table.query(KeyConditionExpression=Key("user_id").eq(sub))
+            return [AchievementDTO(**item) for item in response.get("Items", [])]
+
+    async def judge_achievements(
+        self, agent_id: str, chat_history: List[AiAgentMessageDTO]
+    ):
+        """
+        Agent 아이디를 기반으로 업적 달성 여부를 판단합니다.
+        :param agent_id: Agent 아이디
+        """
+        agent = await manager.get_agent(agent_id)
+
+        judege_mentagent = Agent(
+            name="AchievementJudgement",
+            instructions=f"""
+            당신의 역할은 특정 챗봇의 업적 달성 여부를 판단하는 판단자 입니다.
+            주어진 대화 내용을 통해 업적 달성 여부를 판단해야합니다.
+
+            챗봇 정보는 다음과 같습니다.
+            {agent.model_dump_json()}
+
+            업적 달성한 경우, 달성한 업적 리스트를 반환합니다.
+            업적 달성하지 못한 경우, 빈 리스트를 반환합니다.
+            """,
+            model="gpt-4o-mini",
+            output_type=List[AchievementDTO],
+        )
+
+        result = await Runner.run(
+            judege_mentagent,
+            input=chat_history,
+            run_config=RunConfig(
+                tracing_disabled=True,
+            ),
+        )
+        return result.final_output
+
+
+# 사용자 업적 리스트 반환 클래스
+class UserAchievements(DynamoDBManager):
+    def __init__(self):
+        super().__init__()
+        # 테이블은 self.user_achievement_table_name 으로 설정되어 있음
+
+    async def get_achievements(self, sub: str) -> List[AchievementDTO]:
+        """
+        사용자의 업적 리스트를 반환합니다.
+        """
+        async with self.session.resource(
+            "dynamodb", region_name=self.region_name
+        ) as dynamodb:
+            table = await dynamodb.Table(self.user_achievement_table_name)
+            response = await table.scan(
+                FilterExpression="begins_with(#sub_agent_id, :sub_prefix)",
+                ExpressionAttributeNames={"#sub_agent_id": "sub#agent_id"},
+                ExpressionAttributeValues={":sub_prefix": f"{sub}#"},
+            )
+            return [AchievementDTO(**item) for item in response.get("Items", [])]
+
+    async def get_achievements_by_agent_id(
+        self, sub: str, agent_id: str
+    ) -> List[AchievementDTO]:
+        """
+        사용자의 특정 챗봇 업적 리스트를 반환합니다.
+        """
+        async with self.session.resource(
+            "dynamodb", region_name=self.region_name
+        ) as dynamodb:
+            table = await dynamodb.Table(self.user_achievement_table_name)
+            response = await table.scan(
+                FilterExpression="#sub_agent_id = :sub_agent_id",
+                ExpressionAttributeNames={"#sub_agent_id": "sub#agent_id"},
+                ExpressionAttributeValues={":sub_agent_id": f"{sub}#{agent_id}"},
+            )
             return [AchievementDTO(**item) for item in response.get("Items", [])]

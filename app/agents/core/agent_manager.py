@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+import uuid
 from decimal import Decimal
 from typing import List, Optional
 
@@ -26,16 +27,35 @@ class DynamoDBManager:
         self.region_name = "ap-northeast-2"
         self.table_name = "map_agents"
         self.chat_history_table_name = "map_agent_history"
-        # 챗봇 업적 테이블 이름
-        self.achievement_table_name = "map_agent_achievements"
-        # 챗봇 업적 사용자 테이블 이름
-        self.user_achievement_table_name = "map_user_achievements"
+        self.user_achievement_table_name = (
+            "map_user_achievements"  # 챗봇 업적 사용자 테이블 이름
+        )
 
 
 class AgentManager(DynamoDBManager):
     def __init__(self):
         super().__init__()
         self.set_default_openai_key()
+        self.judgement_agent = Agent[None](
+            name="AchievementJudgement",
+            instructions="""
+            당신의 역할은 특정 챗봇의 업적 달성 여부를 판단하는 판단자 입니다.
+            주어진 대화 내용을 통해 업적 달성 여부를 판단해야합니다.
+
+            업적 달성 조건은 업적 달성 조건을 확인해보고 판단해야해.
+            * 업적 달성 한 경우, 달성한 업적 리스트를 반환합니다.
+            * 업적 달성 하지 못한 경우, 빈 리스트를 반환합니다.
+            """,
+            model="gpt-4o-mini",
+            model_settings=ModelSettings(
+                tool_choice="auto",
+                parallel_tool_calls=True,
+                truncation="auto",
+                temperature=0.2,  # 결정적 응답으로 속도 향상
+                frequency_penalty=0.1,
+                presence_penalty=0.1,
+            ),
+        )
 
     def set_default_openai_key(self):
         set_default_openai_key(os.getenv("OPENAI_API_KEY"), True)
@@ -362,4 +382,66 @@ class AgentManager(DynamoDBManager):
 
         except Exception as e:
             logger.error(f"에이전트 프롬프트 수정 중 오류 발생: {str(e)}")
+            return None
+
+    async def add_achievement_to_user(
+        self, sub: str, agent_id: str, achievement_list: List[AchievementDTO]
+    ):
+        """
+        사용자의 업적 리스트에 추가합니다.
+        :param sub: 사용자 식별자
+        :param agent_id: 에이전트 ID
+        :param achievement_list: 추가할 업적 리스트
+        """
+        try:
+            async with self.session.resource(
+                "dynamodb", region_name=self.region_name
+            ) as dynamodb:
+                table = await dynamodb.Table(self.user_achievement_table_name)
+
+                # 이미 달성한 업적 조회
+                response = await table.scan(
+                    FilterExpression="#sub_agent_id = :sub_agent_id",
+                    ExpressionAttributeNames={"#sub_agent_id": "sub#agent_id"},
+                    ExpressionAttributeValues={":sub_agent_id": f"{sub}#{agent_id}"},
+                    ProjectionExpression="id",
+                )
+                existing_achievements = {
+                    item["id"] for item in response.get("Items", [])
+                }
+
+                # 새로운 업적만 필터링
+                new_achievements = [
+                    achievement
+                    for achievement in achievement_list
+                    if achievement.id not in existing_achievements
+                ]
+
+                if not new_achievements:
+                    logger.info(f"사용자 {sub}가 이미 모든 업적을 달성했습니다.")
+                    return
+
+                # 새로운 업적만 추가
+                for achievement in new_achievements:
+                    await table.put_item(
+                        Item={
+                            "pk": str(uuid.uuid4()),  # 유니크한 파티션 키
+                            "sub#agent_id": f"{sub}#{agent_id}",  # 정렬 키
+                            "sub": sub,
+                            "agent_id": agent_id,
+                            "id": achievement.id,
+                            "name": achievement.name,
+                            "description": achievement.description,
+                            "condition": achievement.condition,
+                            "image": achievement.image,
+                            "rarity": achievement.rarity,
+                            "timestamp": datetime.datetime.now().isoformat(),
+                        }
+                    )
+                    logger.info(
+                        f"사용자 {sub}의 새로운 업적 '{achievement.name}' 추가 완료"
+                    )
+
+        except Exception as e:
+            logger.error(f"사용자 업적 추가 중 오류 발생: {str(e)}")
             return None

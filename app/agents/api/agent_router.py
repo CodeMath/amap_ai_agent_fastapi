@@ -157,6 +157,10 @@ async def run_main_agent_stream(
 
     async def event_generator():
         response_context = ""
+        if req.response_id is None:
+            response_id = None
+        else:
+            response_id = req.response_id
         try:
             await manager.save_chat_history(
                 ChatMessageDTO(
@@ -165,7 +169,7 @@ async def run_main_agent_stream(
                     role="user",
                     content=req.data,
                     context=None,
-                    response_id=None if req.response_id is None else req.response_id,
+                    response_id=response_id,
                 )
             )
 
@@ -184,7 +188,6 @@ async def run_main_agent_stream(
                 ),
             )
             save_chat = False
-            response_id = None
 
             # 이벤트 스트리밍
             async for event in result.stream_events():
@@ -193,7 +196,10 @@ async def run_main_agent_stream(
                 # )
                 # 응답 ID 저장 (마지막 응답에서 사용)
                 try:
-                    response_id = event.data.response.id
+                    if response_id is None:
+                        response_id = event.data.response.id
+                    else:
+                        response_id = req.response_id
                     logger.info(
                         f"-----*-----*-----*-----*\n{event}\n-----*-----*-----*-----*"
                     )
@@ -211,6 +217,7 @@ async def run_main_agent_stream(
                                 )
                             )
                             yield f"data: RESPONSE_ID:{response_id}\n\n"
+
                     except Exception as e:
                         pass
                 except Exception as e:
@@ -254,6 +261,12 @@ async def run_main_agent_stream(
                 response_id=response_id,
             )
         )
+        # 최종 저장 이후 업적 판단 로직 추가
+        if achievement_list := await achievement_manager.judge_achievements(
+            req.agent_id, formatted_history
+        ):
+            # 등록하기
+            await manager.add_achievement_to_user(sub, req.agent_id, achievement_list)
 
     return StreamingResponse(
         event_generator(),

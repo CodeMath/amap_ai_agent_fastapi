@@ -7,6 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from mangum import Mangum
 
+from app.agents.api.achievement_router import router as achievement_router
 from app.agents.api.agent_router import router as agent_router
 from app.agents.api.user_router import public_router
 from dependencies import init_app
@@ -76,6 +77,7 @@ protected_router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 protected_router.include_router(agent_router)
+protected_router.include_router(achievement_router)
 
 # URL 라우터 등록
 app.include_router(protected_router)
