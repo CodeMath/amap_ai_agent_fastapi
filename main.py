@@ -9,6 +9,7 @@ from mangum import Mangum
 
 from app.agents.api.achievement_router import router as achievement_router
 from app.agents.api.agent_router import router as agent_router
+from app.agents.api.subsrbe_router import router as push_router
 from app.agents.api.user_router import public_router
 from dependencies import init_app
 
@@ -78,6 +79,7 @@ protected_router = APIRouter(
 )
 protected_router.include_router(agent_router)
 protected_router.include_router(achievement_router)
+protected_router.include_router(push_router)
 
 # URL 라우터 등록
 app.include_router(protected_router)

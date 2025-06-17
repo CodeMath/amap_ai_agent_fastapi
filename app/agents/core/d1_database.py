@@ -123,3 +123,51 @@ class D1Database:
                 self.url, headers=self.header, json={"sql": sql, "params": params}
             )
             return response.json()["result"][0]["results"][0]
+
+    async def check_subscription_exists(self, sub: str) -> int:
+        """
+        구독 정보 조회
+        """
+        sql = """
+        SELECT COUNT(*) FROM subscription WHERE sub = ?;
+        """
+        params = [sub]
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                self.url, headers=self.header, json={"sql": sql, "params": params}
+            )
+            return response.json()["result"][0]["results"][0]["COUNT(*)"]
+
+    async def save_subscription(self, sub: str, endpoint: str, keys: dict[str, str]):
+        """
+        구독 정보 저장
+        sub: pk (uuid)
+        endpoint: 구독 엔드포인트
+        auth: 인증 키
+        p256dh: 퍼블릭 키
+        created_at: 생성일 (timestamp) 자동 삽입
+
+        프라이머키 기준으로 중복해서 삽입하지 않도록 처리
+        """
+        # 프라이머키 기준으로 중복해서 삽입하지 않도록 처리
+        if await self.check_subscription_exists(sub):
+            raise HTTPException(
+                status_code=400, detail="이미 존재하는 구독 정보입니다."
+            )
+
+        sql = """
+        INSERT INTO subscription (sub, endpoint, auth, p256dh, created_at) VALUES (?, ?, ?, ?, ?);
+        """
+        params = [
+            sub,
+            endpoint,
+            keys["auth"],
+            keys["p256dh"],
+            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ]
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                self.url, headers=self.header, json={"sql": sql, "params": params}
+            )
+            return response.json()

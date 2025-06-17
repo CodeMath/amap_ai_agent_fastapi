@@ -1,8 +1,9 @@
 # app/api/agent_router.py
 import logging
+import os
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt
@@ -11,12 +12,15 @@ from pydantic import ValidationError
 from agents import RunConfig, Runner
 from app.agents.core.achivement_manager import AgentAchievements
 from app.agents.core.agent_manager import AgentManager
+from app.agents.core.d1_database import D1Database
+from app.agents.core.user_manager import UserManager
 from app.agents.schemas.achivement_schemas import (
     AchievementDTO,
     AchievementGeneratorOutput,
 )
 from app.agents.schemas.agent_schemas import AgentDTO, UpdatePromptDTO
 from app.agents.schemas.chat_schemas import AgentRequestDTO, ChatMessageDTO
+from app.agents.schemas.user_schemas import SubscriptionIn
 
 SECRET_KEY = "g34qytgarteh4w6uj46srtjnssw46iujsyjfgjh675wui5sryjf"
 ALGORITHM = "HS256"

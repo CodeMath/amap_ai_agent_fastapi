@@ -6,11 +6,14 @@ from decimal import Decimal
 from typing import List, Optional
 
 import aioboto3
+import httpx
 from agents._config import set_default_openai_key
 from boto3.dynamodb.conditions import Key
 from dotenv import load_dotenv
+from fastapi import Request
 
 from agents import Agent, ModelSettings, WebSearchTool
+from app.agents.core.user_manager import UserManager
 from app.agents.schemas.achivement_schemas import AchievementDTO
 from app.agents.schemas.agent_schemas import AgentDTO
 from app.agents.schemas.chat_schemas import AiAgentMessageDTO, ChatMessageDTO
@@ -56,6 +59,7 @@ class AgentManager(DynamoDBManager):
                 presence_penalty=0.1,
             ),
         )
+        self.user_manager = UserManager()
 
     def set_default_openai_key(self):
         set_default_openai_key(os.getenv("OPENAI_API_KEY"), True)
@@ -441,6 +445,17 @@ class AgentManager(DynamoDBManager):
                     logger.info(
                         f"사용자 {sub}의 새로운 업적 '{achievement.name}' 추가 완료"
                     )
+                    # TODO: Web Push 아밴트 추가
+                    # 웹 푸시 전송
+                    push_endpoint = Request.url_for("user_push", sub=sub)
+                    if push_endpoint:
+                        push_payload = {
+                            "achievement": achievement.name,
+                            "rarity": achievement.rarity,
+                        }
+                        await self.user_manager.send_web_push(
+                            push_endpoint, push_payload
+                        )
 
         except Exception as e:
             logger.error(f"사용자 업적 추가 중 오류 발생: {str(e)}")

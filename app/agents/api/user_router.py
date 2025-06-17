@@ -1,12 +1,16 @@
 import logging
+import os
 from typing import Dict
 
-from fastapi import APIRouter, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request, security
+from fastapi.security import HTTPAuthorizationCredentials
 from jose import jwt
 from passlib.context import CryptContext
 
 from app.agents.core.d1_database import D1Database, verify_password
-from app.agents.schemas.user_schemas import UserSignupRequest
+from app.agents.core.user_manager import UserManager
+from app.agents.schemas.user_schemas import SubscriptionIn, UserSignupRequest
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
