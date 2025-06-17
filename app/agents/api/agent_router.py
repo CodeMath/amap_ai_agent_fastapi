@@ -1,7 +1,8 @@
 # app/api/agent_router.py
+import asyncio
 import logging
 import os
-from typing import List
+from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -271,11 +272,15 @@ async def run_main_agent_stream(
             )
         )
         # 최종 저장 이후 업적 판단 로직 추가
-        if achievement_list := await achievement_manager.judge_achievements(
-            req.agent_id, formatted_history
-        ):
-            # 등록하기
-            await manager.add_achievement_to_user(sub, req.agent_id, achievement_list)
+        asyncio.create_task(
+            process_achievements(
+                achievement_manager=achievement_manager,
+                manager=manager,
+                sub=sub,
+                agent_id=req.agent_id,
+                formatted_history=formatted_history,
+            )
+        )
 
     return StreamingResponse(
         event_generator(),
@@ -285,6 +290,19 @@ async def run_main_agent_stream(
             "Connection": "keep-alive",
         },
     )
+
+
+async def process_achievements(
+    achievement_manager, manager, sub: str, agent_id: str, formatted_history: List[Dict]
+):
+    """업적 판단 및 저장을 비동기로 처리"""
+    try:
+        if achievement_list := await achievement_manager.judge_achievements(
+            agent_id, formatted_history
+        ):
+            await manager.add_achievement_to_user(sub, agent_id, achievement_list)
+    except Exception as e:
+        logger.error(f"업적 처리 중 오류 발생: {str(e)}")
 
 
 @router.post(
