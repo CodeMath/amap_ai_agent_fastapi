@@ -19,7 +19,12 @@ from app.agents.schemas.achivement_schemas import (
     AchievementGeneratorOutput,
 )
 from app.agents.schemas.agent_schemas import AgentDTO, UpdatePromptDTO
-from app.agents.schemas.chat_schemas import AgentRequestDTO, ChatListDTO, ChatMessageDTO
+from app.agents.schemas.chat_schemas import (
+    AgentRequestDTO,
+    AiAgentMessageDTO,
+    ChatListDTO,
+    ChatMessageDTO,
+)
 from app.agents.schemas.user_schemas import SubscriptionIn
 
 SECRET_KEY = "g34qytgarteh4w6uj46srtjnssw46iujsyjfgjh675wui5sryjf"
@@ -106,7 +111,7 @@ async def delete_agent(agent_id: str):
         raise HTTPException(status_code=500, detail=f"{e}")
 
 
-@router.get("/{agent_id}/chat-history", response_model=List[ChatMessageDTO])
+@router.get("/{agent_id}/chat-history", response_model=List[AiAgentMessageDTO])
 async def get_chat_history(agent_id: str, sub: str = Depends(get_sub_from_token)):
     try:
         history = await manager.get_chat_history(sub, agent_id)
