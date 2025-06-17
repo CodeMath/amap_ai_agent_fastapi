@@ -222,6 +222,10 @@ class AgentManager(DynamoDBManager):
         :return: 시간순으로 정렬된 ChatListDTO 리스트
         """
         try:
+            # 에이전트 네이밍을 미리 모두 받아오기
+            agents = await self.list_agents()
+            agent_names = {agent.agent_id: agent.name for agent in agents}
+
             async with self.session.resource(
                 "dynamodb", region_name=self.region_name
             ) as dynamodb:
@@ -253,7 +257,7 @@ class AgentManager(DynamoDBManager):
                         latest_chats.append(
                             ChatListDTO(
                                 agent_id=latest_item["agent_id"],
-                                name=latest_item["name"],
+                                name=agent_names[latest_item["agent_id"]],
                                 content=latest_item["content"],
                                 timestamp=latest_item["timestamp"],
                             )
