@@ -19,7 +19,7 @@ from app.agents.schemas.achivement_schemas import (
     AchievementGeneratorOutput,
 )
 from app.agents.schemas.agent_schemas import AgentDTO, UpdatePromptDTO
-from app.agents.schemas.chat_schemas import AgentRequestDTO, ChatMessageDTO
+from app.agents.schemas.chat_schemas import AgentRequestDTO, ChatListDTO, ChatMessageDTO
 from app.agents.schemas.user_schemas import SubscriptionIn
 
 SECRET_KEY = "g34qytgarteh4w6uj46srtjnssw46iujsyjfgjh675wui5sryjf"
@@ -73,7 +73,7 @@ async def get_agent_list(latitude: float = -90, longitude: float = -180):
         raise HTTPException(status_code=500, detail=f"{e}")
 
 
-@router.get("/start/{agent_id}")
+@router.get("/start/{agent_id}", response_model=AgentDTO)
 async def get_agent(agent_id: str):
     try:
         return await manager.get_agent(agent_id)
@@ -82,7 +82,7 @@ async def get_agent(agent_id: str):
 
 
 # Agent 추가, 수정, 삭제 API
-@router.post("/register")
+@router.post("/register", response_model=AgentDTO)
 async def register_agent(req: AgentDTO):
     try:
         return await manager.register_agent(req)
@@ -90,7 +90,7 @@ async def register_agent(req: AgentDTO):
         raise HTTPException(status_code=500, detail=f"{e}")
 
 
-@router.put("/{agent_id}/update-prompt")
+@router.put("/{agent_id}/update-prompt", response_model=AgentDTO)
 async def update_agent_prompt(agent_id: str, req: UpdatePromptDTO):
     try:
         return await manager.update_agent_prompt(agent_id, req.prompt)
@@ -106,7 +106,7 @@ async def delete_agent(agent_id: str):
         raise HTTPException(status_code=500, detail=f"{e}")
 
 
-@router.get("/{agent_id}/chat-history")
+@router.get("/{agent_id}/chat-history", response_model=List[ChatMessageDTO])
 async def get_chat_history(agent_id: str, sub: str = Depends(get_sub_from_token)):
     try:
         history = await manager.get_chat_history(sub, agent_id)
@@ -117,7 +117,7 @@ async def get_chat_history(agent_id: str, sub: str = Depends(get_sub_from_token)
         raise HTTPException(status_code=500, detail=f"{e}")
 
 
-@router.get("/chat/list")
+@router.get("/chat/list", response_model=List[ChatListDTO])
 async def get_chat_list(sub: str = Depends(get_sub_from_token)):
     try:
         return await manager.get_chat_list(sub)

@@ -34,3 +34,10 @@ class AgentResponseDTO(BaseModel):
 class AgentAPIResponseDTO(BaseModel):
     data: AgentResponseDTO
     response_id: Optional[str] = None  # 이전 응답 id
+
+
+class ChatListDTO(BaseModel):
+    agent_id: str  # 에이전트 아이디
+    name: str  # 에이전트 이름
+    content: str  # 메시지 내용
+    timestamp: Optional[str] = None  # 메시지 생성 시간

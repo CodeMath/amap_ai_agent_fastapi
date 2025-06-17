@@ -16,7 +16,11 @@ from agents import Agent, ModelSettings, WebSearchTool
 from app.agents.core.user_manager import UserManager
 from app.agents.schemas.achivement_schemas import AchievementDTO
 from app.agents.schemas.agent_schemas import AgentDTO
-from app.agents.schemas.chat_schemas import AiAgentMessageDTO, ChatMessageDTO
+from app.agents.schemas.chat_schemas import (
+    AiAgentMessageDTO,
+    ChatListDTO,
+    ChatMessageDTO,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -209,13 +213,13 @@ class AgentManager(DynamoDBManager):
             logger.error(f"채팅 히스토리 조회 중 오류 발생: {str(e)}")
             return []
 
-    async def get_chat_list(self, sub: str) -> List[AgentDTO]:
+    async def get_chat_list(self, sub: str) -> List[ChatListDTO]:
         """
         특정 사용자의 챗봇과의 대화 내역을 조회합니다.
         특정 챗봇과의 대화를 진행한 경우에만 필터링 되어 조회
         agent_id 기준으로 중복 없이 조회
         :param sub: 사용자 식별자
-        :return: 시간순으로 정렬된 AgentDTO 리스트
+        :return: 시간순으로 정렬된 ChatListDTO 리스트
         """
         try:
             async with self.session.resource(
@@ -247,14 +251,15 @@ class AgentManager(DynamoDBManager):
                     if query_response.get("Items"):
                         latest_item = query_response["Items"][0]
                         latest_chats.append(
-                            {
-                                "agent_id": latest_item["agent_id"],
-                                "content": latest_item["content"],
-                                "timestamp": latest_item["timestamp"],
-                            }
+                            ChatListDTO(
+                                agent_id=latest_item["agent_id"],
+                                name=latest_item["name"],
+                                content=latest_item["content"],
+                                timestamp=latest_item["timestamp"],
+                            )
                         )
                 # latest_chats 정렬 최신 시간순으로
-                latest_chats.sort(key=lambda x: x["timestamp"], reverse=True)
+                latest_chats.sort(key=lambda x: x.timestamp, reverse=True)
                 return latest_chats
         except Exception as e:
             logger.error(f"채팅 히스토리 조회 중 오류 발생: {str(e)}")

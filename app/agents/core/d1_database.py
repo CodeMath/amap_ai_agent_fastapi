@@ -2,13 +2,13 @@ import datetime
 import logging
 import os
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import httpx
 from fastapi import HTTPException
 from passlib.context import CryptContext
 
-from app.agents.schemas.user_schemas import UserSignupRequest
+from app.agents.schemas.user_schemas import SubscriptionIn, UserSignupRequest, VapidKey
 
 # 로거 설정
 logger = logging.getLogger(__name__)
@@ -171,3 +171,23 @@ class D1Database:
                 self.url, headers=self.header, json={"sql": sql, "params": params}
             )
             return response.json()
+
+    async def get_subscriptions(self, sub: str) -> SubscriptionIn:
+        """
+        DB에서 sub에 해당하는 구독 정보를 조회합니다.
+        """
+        sql = """
+        SELECT endpoint, auth, p256dh FROM subscription WHERE sub = ?;
+        """
+        params = [sub]
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                self.url, headers=self.header, json={"sql": sql, "params": params}
+            )
+            return SubscriptionIn(
+                endpoint=response.json()["result"][0]["results"][0]["endpoint"],
+                keys=VapidKey(
+                    auth=response.json()["result"][0]["results"][0]["auth"],
+                    p256dh=response.json()["result"][0]["results"][0]["p256dh"],
+                ),
+            )

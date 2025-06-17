@@ -1,9 +1,11 @@
+import json
 import logging
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt
+from pywebpush import WebPushException, webpush
 
 from app.agents.core.d1_database import D1Database
 from app.agents.core.user_manager import UserManager
@@ -39,11 +41,24 @@ async def user_push(sub: str, payload: dict, request: Request):
     특정 사용자에게 웹 푸시 전송
     """
     # 동적으로 자신의 라우트를 사용하여 푸시 엔드포인트 생성
-    push_endpoint = request.url_for("user_push", sub=sub)
-    push_payload = {"user": sub, **payload}
-    user_manager = UserManager()
-    await user_manager.send_web_push(push_endpoint, push_payload)
-    return {"message": "웹 푸시 전송 완료"}
+    try:
+        subs = await D1Database().get_subscriptions(sub)
+        push_payload = {"user": sub, **payload}
+    except Exception as e:
+        logger.error(f"오류: {e}")
+        raise HTTPException(status_code=400, detail=f"구독 정보 조회 중 오류: {e}")
+
+    try:
+        webpush(
+            subscription_info=subs.model_dump(),
+            data=json.dumps(push_payload),
+            vapid_private_key=os.getenv("VAPID_PRIVATE_KEY"),
+            vapid_claims={"sub": os.getenv("VAPID_SUBJECT")},
+        )
+        return {"message": "웹 푸시 전송 완료"}
+    except WebPushException as e:
+        logger.error(f"웹 푸시 전송 실패: {e}")
+        raise HTTPException(status_code=500, detail="웹 푸시 전송 중 오류")
 
 
 @router.get("/vapid_key", summary="VAPID 공개키 조회/구독을 위한")
