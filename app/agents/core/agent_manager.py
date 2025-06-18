@@ -264,7 +264,7 @@ class AgentManager(DynamoDBManager):
             response = await table.get_item(Key={"agent_id": agent_id})
             item = response.get("Item")
             if item is None:
-                return None
+                raise Exception(f"에이전트를 찾을 수 없습니다: {agent_id}")
             return AgentDTO(**item)
 
     async def list_agents(self) -> List[AgentDTO]:
@@ -336,19 +336,29 @@ class AgentManager(DynamoDBManager):
         ) as dynamodb:
             table = await dynamodb.Table(self.table_name)
             await table.put_item(Item=agent.model_dump())
+            return agent
 
     async def delete_agent(self, agent_id: str):
+        # 에이전트 존재 여부 확인
+        agent = await self.get_agent(agent_id)
+        if agent is None:
+            raise Exception(f"에이전트를 찾을 수 없습니다: {agent_id}")
+
         # 에이전트 삭제
         async with self.session.resource(
             "dynamodb", region_name=self.region_name
         ) as dynamodb:
             table = await dynamodb.Table(self.table_name)
             await table.delete_item(Key={"agent_id": agent_id})
+            return {"message": "Agent deleted successfully"}
 
     # Agent DTO 기반으로 에이전트 만들어야함
     async def load_agent(self, agent_id: str):
         # 에이전트 정보 로드
         agent_dto = await self.get_agent(agent_id)
+        if agent_dto is None:
+            raise Exception(f"에이전트를 찾을 수 없습니다: {agent_id}")
+
         agent = Agent(
             name=agent_dto.name,
             instructions=f"""
@@ -392,6 +402,11 @@ class AgentManager(DynamoDBManager):
         :param agent_id: 에이전트 ID
         :return: 시간순으로 정렬된 ChatMessageDTO 리스트
         """
+        # 에이전트 존재 여부 확인
+        agent = await self.get_agent(agent_id)
+        if agent is None:
+            raise Exception(f"에이전트를 찾을 수 없습니다: {agent_id}")
+
         try:
             async with self.session.resource(
                 "dynamodb", region_name=self.region_name
@@ -467,6 +482,11 @@ class AgentManager(DynamoDBManager):
     async def delete_agent_history(
         self, sub: str, agent_id: str
     ) -> List[ChatMessageDTO]:
+        # 에이전트 존재 여부 확인
+        agent = await self.get_agent(agent_id)
+        if agent is None:
+            raise Exception(f"에이전트를 찾을 수 없습니다: {agent_id}")
+
         async with self.session.resource(
             "dynamodb", region_name=self.region_name
         ) as dynamodb:
@@ -507,7 +527,7 @@ class AgentManager(DynamoDBManager):
                 agent = await self.get_agent(agent_id)
                 if agent is None:
                     logger.error(f"에이전트를 찾을 수 없습니다: {agent_id}")
-                    return None
+                    raise Exception(f"에이전트를 찾을 수 없습니다: {agent_id}")
 
                 # 프롬프트 업데이트
                 response = await table.update_item(
@@ -524,7 +544,7 @@ class AgentManager(DynamoDBManager):
 
         except Exception as e:
             logger.error(f"에이전트 프롬프트 수정 중 오류 발생: {str(e)}")
-            return None
+            raise e
 
     async def add_achievement_to_agent(
         self, agent_id: str, achievements: List[AchievementDTO]
@@ -545,7 +565,7 @@ class AgentManager(DynamoDBManager):
                 agent = await self.get_agent(agent_id)
                 if agent is None:
                     logger.error(f"에이전트를 찾을 수 없습니다: {agent_id}")
-                    return None
+                    raise Exception(f"에이전트를 찾을 수 없습니다: {agent_id}")
 
                 for achievement in achievements:
                     print(achievement)
@@ -589,8 +609,8 @@ class AgentManager(DynamoDBManager):
                 return updated_agent
 
         except Exception as e:
-            logger.error(f"에이전트 프롬프트 수정 중 오류 발생: {str(e)}")
-            return None
+            logger.error(f"에이전트 업적 추가 중 오류 발생: {str(e)}")
+            raise e
 
     async def add_achievement_to_user(
         self, sub: str, agent_id: str, achievement_list: List[AchievementDTO]
