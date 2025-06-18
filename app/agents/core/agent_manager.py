@@ -68,6 +68,189 @@ class AgentManager(DynamoDBManager):
     def set_default_openai_key(self):
         set_default_openai_key(os.getenv("OPENAI_API_KEY"), True)
 
+    async def search_nearby_places(
+        self, latitude: float, longitude: float
+    ) -> List[dict]:
+        """
+        Google Places API를 사용해서 주변 장소를 검색합니다.
+        """
+        try:
+            api_key = os.getenv("GOOGLE_PLACES_API_KEY")
+            if not api_key:
+                logger.error("GOOGLE_PLACES_API_KEY가 설정되지 않았습니다.")
+                return []
+
+            logger.info(f"Google Places API 키 확인: {api_key[:10]}...")
+
+            url = "https://places.googleapis.com/v1/places:searchNearby"
+            headers = {
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": api_key,
+                "X-Goog-FieldMask": "places.displayName,places.types,places.location",
+            }
+
+            payload = {
+                "includedTypes": [
+                    "restaurant",
+                    "cafe",
+                    "bar",
+                    "hotel",
+                    "museum",
+                    "park",
+                    "shopping_mall",
+                    "zoo",
+                    "library",
+                    "hospital",
+                    "school",
+                    "university",
+                    "bank",
+                    "post_office",
+                    "fire_station",
+                ],
+                "languageCode": "ko",
+                "maxResultCount": 5,
+                "locationRestriction": {
+                    "circle": {
+                        "center": {
+                            "latitude": float(latitude),
+                            "longitude": float(longitude),
+                        },
+                        "radius": 500.0,
+                    }
+                },
+            }
+
+            logger.info(f"Google Places API 요청: {url}")
+            logger.info(f"요청 페이로드: {payload}")
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, headers=headers, json=payload)
+
+                if response.status_code != 200:
+                    logger.error(f"Google Places API 오류: {response.status_code}")
+                    logger.error(f"응답 내용: {response.text}")
+
+                    if response.status_code == 403:
+                        logger.error("403 Forbidden - API 키 확인 필요:")
+                        logger.error("1. GOOGLE_PLACES_API_KEY 환경변수 확인")
+                        logger.error(
+                            "2. Google Cloud Console에서 Places API 활성화 확인"
+                        )
+                        logger.error("3. API 키에 Places API 권한 확인")
+                        logger.error("4. API 키 할당량 확인")
+
+                    return []
+
+                data = response.json()
+                places = data.get("places", [])
+                logger.info(f"주변 장소 {len(places)}개 발견")
+                return places
+
+        except Exception as e:
+            logger.error(f"Google Places API 호출 중 오류 발생: {str(e)}")
+            return []
+
+    async def create_agent_from_place(self, place: dict) -> AgentDTO:
+        """
+        장소 정보를 기반으로 Agent를 생성합니다.
+        """
+        logger.info(f"create_agent_from_place: {place}")
+        try:
+            display_name = place.get("displayName", {}).get("text", "알 수 없는 장소")
+            location = place.get("location", {})
+            place_types = place.get("types", [])
+
+            # 장소 타입에 따른 프롬프트 생성
+            type_prompt = ""
+            for type_text in place_types:
+                try:
+                    type_prompt += self._generate_type_prompt(type_text)
+                except Exception as e:
+                    logger.error(f"장소 타입 프롬프트 생성 중 오류 발생: {str(e)}")
+                    pass
+
+            agent_id = str(uuid.uuid4())
+            agent = AgentDTO(
+                agent_id=agent_id,
+                name=display_name,
+                description=f"{display_name} 챗봇",
+                prompt=f"""
+                당신은 {display_name}의 챗봇입니다.
+                {type_prompt}
+                
+                # 응답 스타일
+                - 유머와 은유를 적극 활용하며, 필요하다면 가벼운 비속어("ㅋㅋ, ㅂㅅ, 어쩔? 등")을 사용하여 캐릭터의 개성을 강조합니다.
+                - 해당 에이전트는 장소와 관련되어 있기 때문에, 해당 위치 기반으로 추가 정보와 응답 스타일을 자유롭게 이야기합니다.
+                - 출력 토큰은 170 토큰 미만으로만 사용해야 합니다.
+                """,
+                latitude=float(location.get("latitude", 0)),
+                longitude=float(location.get("longitude", 0)),
+                thumbnail="",
+                tools=[],
+                model="gpt-4.1-mini",
+                achievements=[],
+            )
+
+            return agent
+
+        except Exception as e:
+            logger.error(f"Agent 생성 중 오류 발생: {str(e)}")
+            return None
+
+    def _generate_type_prompt(self, place_types: List[str]) -> str:
+        """
+        장소 타입에 따른 프롬프트를 생성합니다.
+        """
+        type_prompts = {
+            "restaurant": "맛집 정보, 추천 메뉴, 영업시간, 가격대 등을 알려주세요.",
+            "cafe": "카페 분위기, 추천 음료, 디저트, 영업시간 등을 알려주세요.",
+            "bar": "술집 분위기, 추천 술, 안주, 영업시간 등을 알려주세요.",
+            "hotel": "호텔 시설, 객실 정보, 체크인/아웃 시간, 주변 관광지를 알려주세요.",
+            "museum": "전시 정보, 관람 시간, 입장료, 특별 전시 등을 알려주세요.",
+            "park": "공원 시설, 산책로, 휴식 공간, 계절별 볼거리를 알려주세요.",
+            "shopping_mall": "쇼핑몰 매장, 영업시간, 주차 정보, 푸드코트 등을 알려주세요.",
+            "zoo": "동물 정보, 관람 시간, 입장료, 특별 이벤트를 알려주세요.",
+            "library": "도서관 시설, 대출 방법, 열람실, 특별 컬렉션을 알려주세요.",
+            "hospital": "진료과목, 진료시간, 예약 방법, 응급실 정보를 알려주세요.",
+            "school": "학교 정보, 교육 과정, 입학 안내, 시설을 알려주세요.",
+            "university": "대학교 정보, 학과, 입학 안내, 캠퍼스 시설을 알려주세요.",
+            "bank": "은행 서비스, 영업시간, ATM 위치, 대출 상품을 알려주세요.",
+            "post_office": "우체국 서비스, 영업시간, 택배 서비스, 우표 구매를 알려주세요.",
+            "fire_station": "소방서 정보, 화재 예방, 응급 상황 대처법을 알려주세요.",
+        }
+
+        for place_type in place_types:
+            if place_type in type_prompts:
+                return type_prompts[place_type]
+
+        return "해당 장소에 대한 정보를 제공해주세요."
+
+    async def create_agents_from_nearby_places(
+        self, latitude: float, longitude: float
+    ) -> List[AgentDTO]:
+        """
+        주변 장소를 검색하고 Agent를 생성하여 데이터베이스에 저장합니다.
+        """
+        try:
+            places = await self.search_nearby_places(latitude, longitude)
+            if not places:
+                logger.warning("주변 장소를 찾을 수 없습니다.")
+                return []
+
+            created_agents = []
+            for place in places:
+                agent = await self.create_agent_from_place(place)
+                if agent:
+                    await self.register_agent(agent)
+                    created_agents.append(agent)
+                    logger.info(f"Agent 생성 완료: {agent.name}")
+
+            return created_agents
+
+        except Exception as e:
+            logger.error(f"주변 장소 기반 Agent 생성 중 오류 발생: {str(e)}")
+            return []
+
     async def get_agent(self, agent_id: str) -> Optional[AgentDTO]:
         """
         에이전트 아이디로 단일 에이전트를 조회합니다.
@@ -101,6 +284,7 @@ class AgentManager(DynamoDBManager):
     async def filter_agents(self, latitude: float, longitude: float) -> List[AgentDTO]:
         """
         위도/경도 기준으로 반경 1000m 이내의 에이전트를 조회합니다.
+        데이터가 없을 경우 Google Places API를 통해 주변 장소를 찾아 Agent를 생성합니다.
         :param latitude: 중심 위도
         :param longitude: 중심 경도
         :return: AgentDTO 리스트
@@ -129,6 +313,17 @@ class AgentManager(DynamoDBManager):
 
                 logger.info(f"response: {response}")
                 items = response.get("Items", [])
+                if not items:
+                    # 데이터가 없을 경우 Google Places API를 통해 주변 장소를 찾아 Agent 생성
+                    logger.info(
+                        "주변 Agent가 없습니다. Google Places API를 통해 새로운 Agent를 생성합니다."
+                    )
+                    created_agents = await self.create_agents_from_nearby_places(
+                        latitude, longitude
+                    )
+                    logger.info(f"created_agents: {created_agents}")
+                    return created_agents
+
                 return [AgentDTO(**item) for item in items]
         except Exception as e:
             logger.error(f"Error filtering agents: {str(e)}")
