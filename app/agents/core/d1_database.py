@@ -136,7 +136,28 @@ class D1Database:
             response = await client.post(
                 self.url, headers=self.header, json={"sql": sql, "params": params}
             )
-            return response.json()["result"][0]["results"][0]["COUNT(*)"]
+
+            # 응답 상태 코드 확인
+            if response.status_code != 200:
+                logger.error(
+                    f"D1 DB 쿼리 실패: {response.status_code} - {response.text}"
+                )
+                raise HTTPException(status_code=500, detail="데이터베이스 쿼리 실패")
+
+            try:
+                result = response.json()
+                if "result" not in result or not result["result"]:
+                    logger.error(f"D1 DB 응답 형식 오류: {result}")
+                    return 0
+
+                results = result["result"][0]["results"]
+                if not results:
+                    return 0
+
+                return results[0]["COUNT(*)"]
+            except (KeyError, IndexError) as e:
+                logger.error(f"D1 DB 응답 파싱 오류: {e}, 응답: {response.text}")
+                return 0
 
     async def save_subscription(self, sub: str, endpoint: str, keys: dict[str, str]):
         """
@@ -170,7 +191,19 @@ class D1Database:
             response = await client.post(
                 self.url, headers=self.header, json={"sql": sql, "params": params}
             )
-            return response.json()
+
+            # 응답 상태 코드 확인
+            if response.status_code != 200:
+                logger.error(
+                    f"D1 DB 저장 실패: {response.status_code} - {response.text}"
+                )
+                raise HTTPException(status_code=500, detail="구독 정보 저장 실패")
+
+            try:
+                return response.json()
+            except Exception as e:
+                logger.error(f"D1 DB 저장 응답 파싱 오류: {e}, 응답: {response.text}")
+                raise HTTPException(status_code=500, detail="구독 정보 저장 실패")
 
     async def get_subscriptions(self, sub: str) -> SubscriptionIn:
         """
@@ -184,10 +217,18 @@ class D1Database:
             response = await client.post(
                 self.url, headers=self.header, json={"sql": sql, "params": params}
             )
+            results = response.json()["result"][0]["results"]
+
+            if not results:
+                raise HTTPException(
+                    status_code=404, detail="구독 정보를 찾을 수 없습니다."
+                )
+
+            result = results[0]
             return SubscriptionIn(
-                endpoint=response.json()["result"][0]["results"][0]["endpoint"],
+                endpoint=result["endpoint"],
                 keys=VapidKey(
-                    auth=response.json()["result"][0]["results"][0]["auth"],
-                    p256dh=response.json()["result"][0]["results"][0]["p256dh"],
+                    auth=result["auth"],
+                    p256dh=result["p256dh"],
                 ),
             )

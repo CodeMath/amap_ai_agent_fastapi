@@ -32,17 +32,29 @@ async def get_sub_from_token(
         raise HTTPException(status_code=401, detail="인증에 실패했습니다.")
 
 
+async def get_d1_database() -> D1Database:
+    """D1Database 의존성 주입"""
+    return D1Database()
+
+
+async def get_user_manager() -> UserManager:
+    """UserManager 의존성 주입"""
+    return UserManager()
+
+
 router = APIRouter(prefix="/push", tags=["push"])
 
 
 @router.post("/{sub}/push", name="user_push")
-async def user_push(sub: str, payload: dict, request: Request):
+async def user_push(
+    sub: str, payload: dict, request: Request, db: D1Database = Depends(get_d1_database)
+):
     """
     특정 사용자에게 웹 푸시 전송
     """
     # 동적으로 자신의 라우트를 사용하여 푸시 엔드포인트 생성
     try:
-        subs = await D1Database().get_subscriptions(sub)
+        subs = await db.get_subscriptions(sub)
         push_payload = {"user": sub, **payload}
     except Exception as e:
         logger.error(f"오류: {e}")
@@ -73,12 +85,12 @@ async def get_vapid_public_key():
 async def subscribe(
     subscription: SubscriptionIn,
     sub: str = Depends(get_sub_from_token),
+    db: D1Database = Depends(get_d1_database),
 ):
     """
     브라우저 Push 구독 정보를 저장합니다.
     """
     try:
-        db = D1Database()  # 본인이 사용하는 DB 매니저
         await db.save_subscription(sub, subscription.endpoint, subscription.keys)
         logger.info(f"구독 정보 저장: user={sub}, endpoint={subscription.endpoint}")
     except Exception as e:
