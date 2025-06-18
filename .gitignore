@@ -48,7 +48,7 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test & pytest / coverage reports
-htmlcov/
+# htmlcov/
 .tox/
 .coverage
 .cache
@@ -62,6 +62,3 @@ pytest-coverage.txt
 logs/
 newrelic-infra/
 newrelic.ini
-
-### Test Docker compose ###
-docker-compose.yml
