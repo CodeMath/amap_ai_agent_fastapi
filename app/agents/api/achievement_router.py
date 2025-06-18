@@ -16,7 +16,7 @@ ALGORITHM = "HS256"
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-router = APIRouter(prefix="/achievments", tags=["achievments"])
+router = APIRouter(prefix="/achievements", tags=["achievements"])
 
 user_achievement_manager = UserAchievements()
 
