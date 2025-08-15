@@ -5,6 +5,9 @@
 ### 사이드프로젝트 리뷰
 [📝 Notion 리뷰 보기](https://jadecon.notion.site/AMAP-AI-21640f9a6b7c800d898fc4d539dc5e29)
 
+* MVP 수준으로 코드 퀄리티는 보장하지 못합니다.
+* 코드 내 SECRET_KEY는 임시 JWT 해시키 입니다.
+
 
 ### Tech Stack
 
